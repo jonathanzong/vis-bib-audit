@@ -1,0 +1,5 @@
+.bibaudit_cache.json
+__pycache__/
+*.bib
+clean_bibtex.py
+*.tex
