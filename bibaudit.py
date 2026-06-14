@@ -351,10 +351,25 @@ def audit_offline(entries, report):
         minority_keys = [key for k in sorted(style_kinds) if k != majority
                          for key in page_styles[k]]
         shown = ", ".join(minority_keys[:10]) + (" …" if len(minority_keys) > 10 else "")
-        report.info("(global)", "Mixed page / article-number styles across file "
-                                f"({summary}). Pick one convention and apply it everywhere; "
-                                f"the fewer to change are the {len(minority_keys)} not using the "
-                                f"most common '{majority}' style: {shown}.")
+        artno_styles = sorted(style_kinds & {"colon", "acmnote", "artno"})
+        parts = [f"Mixed page / article-number styles across file ({summary})."]
+        # Only explain a fix for the relationship actually present in the file.
+        if len(artno_styles) > 1:
+            # Same article-number fact in different spellings — unify mechanically.
+            if "colon" in artno_styles:
+                parts.append("The colon form 'pages = {42:1--42:18}' is article 42 with "
+                             "numpages = last-first+1 = 18, the same fact as "
+                             "'articleno = {42}, numpages = {18}' — rewrite one as the other.")
+            else:
+                parts.append("These are the same article-number fact in different spellings — "
+                             "unify on the field form, e.g. 'articleno = {42}, numpages = {18}'.")
+        if "range" in style_kinds and artno_styles:
+            parts.append("Article-number and page-range (pages = {1234--1251}) entries are "
+                         "different venue conventions, not interchangeable formats — keep each "
+                         "entry as its venue prints it.")
+        parts.append(f"The fewer to change are the {len(minority_keys)} not using the most "
+                     f"common '{majority}' style: {shown}.")
+        report.info("(global)", " ".join(parts))
 
     # proceedings-name consistency (short form is optional/brevity — flag only a MIX)
     if proc_short and proc_long:
