@@ -3,3 +3,4 @@ __pycache__/
 *.bib
 clean_bibtex.py
 *.tex
+.DS_Store

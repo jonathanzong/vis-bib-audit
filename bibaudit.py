@@ -211,7 +211,7 @@ def classify_page_style(e):
 def audit_offline(entries, report):
     seen_keys = {}
     seen_dois = {}
-    month_usage = {"with": 0, "without": 0}
+    month_keys = {"with": [], "without": []}
     page_styles = defaultdict(list)
     long_addr = []    # keys with long-form publisher/address (brevity)
     proc_short = []   # inproceedings keys using 'Proc. X' short form
@@ -296,9 +296,9 @@ def audit_offline(entries, report):
         # months on articles (always-or-never)
         if etype == "article":
             if e.get("month", "").strip():
-                month_usage["with"] += 1
+                month_keys["with"].append(key)
             else:
-                month_usage["without"] += 1
+                month_keys["without"].append(key)
 
         # title brace-protection heuristic
         title = e.get("title", "")
@@ -328,27 +328,49 @@ def audit_offline(entries, report):
                                  "if this is an article number, cite it consistently as an "
                                  "article number, not a single page.")
 
-    # months consistency verdict (always-or-never)
-    if month_usage["with"] and month_usage["without"]:
-        report.info("(global)", f"Month usage on @article is inconsistent: "
-                                f"{month_usage['with']} with month, "
-                                f"{month_usage['without']} without. Use months always or never.")
+    # months consistency verdict (always-or-never). List the keys on the smaller
+    # side so the reader knows where the fewest edits bring the file in line.
+    if month_keys["with"] and month_keys["without"]:
+        n_with, n_without = len(month_keys["with"]), len(month_keys["without"])
+        minority = "with" if n_with <= n_without else "without"
+        verb = "have a month" if minority == "with" else "omit it"
+        shown = ", ".join(month_keys[minority][:10]) + (
+            " …" if len(month_keys[minority]) > 10 else "")
+        report.info("(global)", f"Month usage on @article is inconsistent: {n_with} with "
+                                f"month, {n_without} without. Use months always or never; the "
+                                f"fewer to change are the {len(month_keys[minority])} that "
+                                f"{verb}: {shown}.")
 
     # page-style consistency verdict (flag, don't pick)
     style_kinds = {k for k in page_styles if k in ("range", "colon", "acmnote", "artno")}
     if len(style_kinds) > 1:
         summary = "; ".join(f"{k}: {len(page_styles[k])} entr(ies)" for k in sorted(style_kinds))
+        # Show keys for every style except the most common one — those are the
+        # fewer entries to convert to reach a single convention.
+        majority = max(sorted(style_kinds), key=lambda k: len(page_styles[k]))
+        minority_keys = [key for k in sorted(style_kinds) if k != majority
+                         for key in page_styles[k]]
+        shown = ", ".join(minority_keys[:10]) + (" …" if len(minority_keys) > 10 else "")
         report.info("(global)", "Mixed page / article-number styles across file "
-                                f"({summary}). Pick one convention and apply it everywhere.")
+                                f"({summary}). Pick one convention and apply it everywhere; "
+                                f"the fewer to change are the {len(minority_keys)} not using the "
+                                f"most common '{majority}' style: {shown}.")
 
     # proceedings-name consistency (short form is optional/brevity — flag only a MIX)
     if proc_short and proc_long:
-        shown = ", ".join(proc_long[:10]) + (" …" if len(proc_long) > 10 else "")
+        # List whichever form is less common — the smaller set to bring in line.
+        if len(proc_short) <= len(proc_long):
+            minority_label, minority_keys = "short 'Proc. X'", proc_short
+        else:
+            minority_label, minority_keys = "long-name", proc_long
+        shown = ", ".join(minority_keys[:10]) + (" …" if len(minority_keys) > 10 else "")
         report.info("(global)", f"Proceedings names mix forms: {len(proc_short)} use the short "
-                                f"'Proc. X' style, {len(proc_long)} use long names ({shown}). "
+                                f"'Proc. X' style, {len(proc_long)} use long names. "
                                 "Short form (e.g. 'Proc. CHI') is optional — a brevity/"
                                 "consistency choice, not required — but if you use it, apply it "
-                                "throughout (it also avoids repeating the year).")
+                                f"throughout (it also avoids repeating the year). The fewer to "
+                                f"change are the {len(minority_keys)} {minority_label} ones: "
+                                f"{shown}.")
 
     # long-form addresses (optional brevity, aggregated)
     if long_addr:
